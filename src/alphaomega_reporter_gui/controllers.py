@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+import traceback
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from PySide6 import QtCore
+
+from alphaomega_reporter import build_report, load_case
+
+from .models import CaseModel, DepthModel, build_case_model
+from .processing import (
+    LfpPreviewResult,
+    MerPreviewResult,
+    ProcessingCache,
+    compute_lfp_preview,
+    compute_mer_preview,
+)
+from .report_config import GuiReportConfig
+
+
+class WorkerSignals(QtCore.QObject):
+    result = QtCore.Signal(object)
+    error = QtCore.Signal(str)
+    progress = QtCore.Signal(str)
+    finished = QtCore.Signal()
+
+
+class Worker(QtCore.QRunnable):
+    def __init__(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+        super().__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            result = self.fn(
+                *self.args,
+                progress_callback=self.signals.progress.emit,
+                **self.kwargs,
+            )
+        except Exception:
+            self.signals.error.emit(traceback.format_exc())
+        else:
+            self.signals.result.emit(result)
+        finally:
+            self.signals.finished.emit()
+
+
+class GuiController(QtCore.QObject):
+    log_message = QtCore.Signal(str)
+
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
+        super().__init__(parent)
+        self.thread_pool = QtCore.QThreadPool.globalInstance()
+        self.cache = ProcessingCache()
+
+    def _submit(
+        self,
+        fn: Callable[..., Any],
+        *args: Any,
+        on_result: Callable[[Any], None] | None = None,
+        on_error: Callable[[str], None] | None = None,
+        on_finished: Callable[[], None] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        worker = Worker(fn, *args, **kwargs)
+        worker.signals.progress.connect(self.log_message.emit)
+        if on_result is not None:
+            worker.signals.result.connect(on_result)
+        if on_error is not None:
+            worker.signals.error.connect(on_error)
+        else:
+            worker.signals.error.connect(self.log_message.emit)
+        if on_finished is not None:
+            worker.signals.finished.connect(on_finished)
+        self.thread_pool.start(worker)
+
+    def clear_cache(self) -> None:
+        self.cache.clear()
+
+    def load_case_async(
+        self,
+        case_dir: str | Path,
+        gui_config: GuiReportConfig,
+        *,
+        on_result: Callable[[CaseModel], None],
+        on_error: Callable[[str], None],
+        on_finished: Callable[[], None] | None = None,
+    ) -> None:
+        self.clear_cache()
+        self._submit(
+            self._load_case,
+            case_dir,
+            gui_config,
+            on_result=on_result,
+            on_error=on_error,
+            on_finished=on_finished,
+        )
+
+    def mer_preview_async(
+        self,
+        current_depth: DepthModel,
+        selected_depths: list[DepthModel],
+        channel_index: int,
+        gui_config: GuiReportConfig,
+        *,
+        on_result: Callable[[MerPreviewResult], None],
+        on_error: Callable[[str], None],
+    ) -> None:
+        self._submit(
+            compute_mer_preview,
+            current_depth,
+            selected_depths,
+            channel_index,
+            gui_config,
+            self.cache,
+            on_result=on_result,
+            on_error=on_error,
+        )
+
+    def lfp_preview_async(
+        self,
+        selected_depths: list[DepthModel],
+        channel_index: int,
+        gui_config: GuiReportConfig,
+        *,
+        on_result: Callable[[LfpPreviewResult], None],
+        on_error: Callable[[str], None],
+    ) -> None:
+        self._submit(
+            compute_lfp_preview,
+            selected_depths,
+            channel_index,
+            gui_config,
+            self.cache,
+            on_result=on_result,
+            on_error=on_error,
+        )
+
+    def generate_report_async(
+        self,
+        case_model: CaseModel,
+        gui_config: GuiReportConfig,
+        out_pdf: str | Path,
+        *,
+        on_result: Callable[[Path], None],
+        on_error: Callable[[str], None],
+        on_finished: Callable[[], None] | None = None,
+    ) -> None:
+        self._submit(
+            self._generate_report,
+            case_model,
+            gui_config,
+            out_pdf,
+            on_result=on_result,
+            on_error=on_error,
+            on_finished=on_finished,
+        )
+
+    @staticmethod
+    def _load_case(
+        case_dir: str | Path,
+        gui_config: GuiReportConfig,
+        *,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> CaseModel:
+        if progress_callback is not None:
+            progress_callback(f"Loading case directory: {case_dir}")
+        report_config = gui_config.to_report_config()
+        session = load_case(case_dir, report_config, require_depth=False)
+        case_model = build_case_model(session, report_config)
+        if progress_callback is not None:
+            progress_callback(
+                f"Loaded {len(case_model.trajectories)} trajectories from {case_model.case_name}"
+            )
+        return case_model
+
+    @staticmethod
+    def _generate_report(
+        case_model: CaseModel,
+        gui_config: GuiReportConfig,
+        out_pdf: str | Path,
+        *,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> Path:
+        if progress_callback is not None:
+            progress_callback(f"Generating report: {out_pdf}")
+        report_config = gui_config.to_report_config()
+        out_path = build_report(case_model.session, report_config, out_pdf)
+        if progress_callback is not None:
+            progress_callback(f"Finished report: {out_path}")
+        return Path(out_path)

@@ -16,6 +16,7 @@ dependencies = [
   "numpy>=1.24",
   "pydantic>=2.6",
   "pypdf>=4.2",
+  "PySide6>=6.7",
   "PyYAML>=6.0",
   "scikit-learn>=1.4",
   "scipy>=1.11",
@@ -28,6 +29,12 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.4",
 ]
+gui-performance = [
+  "pyqtgraph>=0.13",
+]
+packaging = [
+  "pyinstaller>=6.8",
+]
 mpx = [
   "neo>=0.13",
 ]
@@ -37,12 +44,17 @@ spikeinterface = [
 
 [project.scripts]
 ao-report = "alphaomega_reporter.cli:app"
+ao-reporter = "alphaomega_reporter.cli:app"
+ao-reporter-gui = "alphaomega_reporter_gui.app:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+alphaomega_reporter_gui = ["resources/*"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

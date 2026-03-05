@@ -1,0 +1,31 @@
+report:
+  render:
+    group_by: trajectory
+    include_cover_page: true
+    include_spike_raster_panel: true
+    include_lfp_heatmap_panel: true
+    include_bandpower_panel: true
+    include_unit_fr_panel: true
+    include_unit_amplitude_panel: true
+    include_summary_table: true
+    include_mua_rms_panel: false
+mer:
+  highpass_hz: 300.0
+  lowpass_hz: null
+  notch_hz: null
+  notch_width_hz: 4.0
+  filter_order: 3
+  preview_seconds: 1.0
+  threshold_mad: 4.5
+  refractory_ms: 1.5
+  run_fast_sorting: false
+lfp_view:
+  psd_method: welch
+  band_preset: beta
+  custom_band_low_hz: 13.0
+  custom_band_high_hz: 30.0
+  freq_min_hz: 0.0
+  freq_max_hz: 100.0
+  notch_hz: 60.0
+  notch_width_hz: 4.0
+output_pdf: null
