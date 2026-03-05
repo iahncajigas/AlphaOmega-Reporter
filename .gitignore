@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+build/
+dist/
+src/*.egg-info/
+*.h5
+*.pdf
+tmp/
+output/
+
