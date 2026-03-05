@@ -10,5 +10,15 @@ dist/
 src/*.egg-info/
 *.h5
 *.pdf
+*.map
+*.mpx
+*.mlx
+*.lsm
+*.lsx
+*.mat
+*.bin
+*.xml.bak
+*_AlphaOmega/
+conversion/
 tmp/
 output/
