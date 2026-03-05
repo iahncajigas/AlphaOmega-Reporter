@@ -1,6 +1,13 @@
 """Standalone Python reporting toolbox for AlphaOmega MER and LFP data."""
 
 from .config import ReportConfig
+from .features import (
+    apply_notch_filter,
+    band_limits,
+    compute_bandpower_db,
+    compute_multitaper_psd,
+    compute_welch_psd,
+)
 from .h5io import export_h5
 from .io import load_case
 from .model import (
@@ -27,8 +34,13 @@ __all__ = [
     "SpikeStream",
     "TrajectoryGroup",
     "UnitSummary",
+    "apply_notch_filter",
+    "band_limits",
     "build_report",
     "build_report_from_session",
+    "compute_bandpower_db",
+    "compute_multitaper_psd",
+    "compute_welch_psd",
     "export_h5",
     "load_case",
 ]

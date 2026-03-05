@@ -61,7 +61,9 @@ def _apply_regex_meta(segment: Segment, source_text: str, pattern: str) -> None:
         segment.meta["depth_mm"] = float(groups["depth"])
 
 
-def normalize_segment_metadata(session: Session, config: ReportConfig) -> None:
+def normalize_segment_metadata(
+    session: Session, config: ReportConfig, *, require_depth: bool = True
+) -> None:
     for segment in session.segments:
         if "trajectory_number" in segment.meta:
             try:
@@ -99,15 +101,23 @@ def normalize_segment_metadata(session: Session, config: ReportConfig) -> None:
                 source_file = str(segment.meta.get("source_file", ""))
                 _apply_regex_meta(segment, Path(source_file).name, rule.pattern)
 
-    if not any(segment.meta.get("depth_mm") is not None for segment in session.segments):
+    if require_depth and not any(
+        segment.meta.get("depth_mm") is not None for segment in session.segments
+    ):
         raise AlphaOmegaReporterError("no segments with depth metadata found")
 
 
-def load_case(case_dir: Path | str, config: ReportConfig) -> Session:
+def load_case(
+    case_dir: Path | str,
+    config: ReportConfig | None = None,
+    *,
+    require_depth: bool = True,
+) -> Session:
+    report_config = config or ReportConfig()
     path = Path(case_dir).expanduser().resolve()
     if not path.is_dir():
         raise AlphaOmegaReporterError(f"case-dir must be a directory: {path}")
-    kind, selected_files = _detect_case_kind(path, config)
+    kind, selected_files = _detect_case_kind(path, report_config)
     if kind == "map":
         session = MAPSessionReader(path).read(scale_to_uv=False, concat_depth_files=True)
     elif kind == "mpx":
@@ -127,8 +137,8 @@ def load_case(case_dir: Path | str, config: ReportConfig) -> Session:
                 )
             except MPXReaderUnavailableError as exc:
                 raise AlphaOmegaReporterError(str(exc)) from exc
-    normalize_segment_metadata(session, config)
-    case_meta = parse_case_metadata(path, config)
+    normalize_segment_metadata(session, report_config, require_depth=require_depth)
+    case_meta = parse_case_metadata(path, report_config)
     session.meta["case_dir"] = str(path)
     session.meta["case_name"] = path.name
     session.meta["case_metadata"] = {

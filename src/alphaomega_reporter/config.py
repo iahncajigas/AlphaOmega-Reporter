@@ -144,6 +144,14 @@ class RenderConfig(BaseModel):
     placeholder_text: str = "Not available"
     group_by: str = "trajectory"
     plot_bands: list[str] = Field(default_factory=list)
+    include_cover_page: bool = True
+    include_spike_raster_panel: bool = True
+    include_lfp_heatmap_panel: bool = True
+    include_bandpower_panel: bool = True
+    include_unit_fr_panel: bool = True
+    include_unit_amplitude_panel: bool = True
+    include_summary_table: bool = True
+    include_mua_rms_panel: bool = False
 
     @model_validator(mode="after")
     def _validate_group_by(self) -> RenderConfig:
@@ -169,3 +177,11 @@ class ReportConfig(BaseModel):
             return cls()
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         return cls.model_validate(data)
+
+    def to_yaml(self, path: str | Path) -> Path:
+        target = Path(path)
+        target.write_text(
+            yaml.safe_dump(self.model_dump(mode="json"), sort_keys=False),
+            encoding="utf-8",
+        )
+        return target

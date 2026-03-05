@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import matplotlib
-
-matplotlib.use("Agg")
-
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -315,6 +311,29 @@ def plot_multiband_profiles(
         ax.set_xlabel("Depth (mm)")
         ax.set_ylabel("Bandpower (dB)")
     fig.tight_layout()
+
+
+def plot_mua_rms_profile(
+    ax: Axes,
+    depths_mm: Sequence[float],
+    rms_values: Sequence[float | None],
+    mua_values: Sequence[float | None],
+    config: ReportConfig,
+) -> None:
+    depths = np.asarray(depths_mm, dtype=np.float64)
+    rms = np.asarray([np.nan if value is None else float(value) for value in rms_values])
+    mua = np.asarray([np.nan if value is None else float(value) for value in mua_values])
+    if not np.any(np.isfinite(rms)) and not np.any(np.isfinite(mua)):
+        add_placeholder(ax, "MUA/RMS vs Depth", "No MER summary metrics available", config)
+        return
+    if np.any(np.isfinite(rms)):
+        ax.plot(depths, rms, marker="o", lw=1.4, color="#355070", label="RMS")
+    if np.any(np.isfinite(mua)):
+        ax.plot(depths, mua, marker="s", lw=1.2, color="#e56b6f", label="MUA mean")
+    ax.set_title("MUA/RMS vs Depth")
+    ax.set_xlabel("Depth (mm)")
+    ax.set_ylabel("Amplitude (a.u.)")
+    ax.legend(loc="best")
 
 
 def _fmt(value: float | None) -> str:

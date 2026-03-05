@@ -22,7 +22,7 @@ class FastSortingResult:
     warnings: list[str]
 
 
-def _detect_spikes(
+def detect_spikes_threshold(
     values: np.ndarray, fs_hz: float, threshold_mad: float, refractory_ms: float
 ) -> np.ndarray:
     data = np.asarray(values, dtype=np.float64).reshape(-1)
@@ -107,7 +107,7 @@ def sort_single_channel(
     config: ReportConfig,
 ) -> FastSortingResult:
     filtered = highpass_filter(values, fs_hz, config.sorting.highpass_hz)
-    spike_idx = _detect_spikes(
+    spike_idx = detect_spikes_threshold(
         filtered,
         fs_hz,
         threshold_mad=config.sorting.threshold_mad,

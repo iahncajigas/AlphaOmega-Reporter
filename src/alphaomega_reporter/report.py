@@ -16,6 +16,7 @@ from .features import (
     band_limits,
     compute_bandpower_db,
     compute_mer_rms,
+    compute_mua_envelope,
     compute_welch_psd,
     interpolate_psd_to_grid,
     ordered_bands,
@@ -36,6 +37,7 @@ from .viz import (
     apply_matplotlib_defaults,
     plot_bandpower_profile,
     plot_lfp_heatmap,
+    plot_mua_rms_profile,
     plot_multiband_profiles,
     plot_spike_raster,
     plot_unit_metric_hist2d,
@@ -58,6 +60,7 @@ class DepthAnalysis:
     lfp_psd: PSDResult | None
     warnings: list[str]
     amplitude_units: str
+    mua_mean: float | None
 
 
 @dataclass
@@ -72,10 +75,23 @@ class TrajectoryAnalysis:
     amplitude_units: str
 
 
-def build_report(case_dir: Path | str, out: Path | str, config: ReportConfig | None = None) -> Path:
-    report_config = config or ReportConfig()
-    session = load_case(case_dir, report_config)
-    return build_report_from_session(session, out, report_config)
+def build_report(
+    source: Session | Path | str,
+    config_or_out: ReportConfig | Path | str | None,
+    out: Path | str | None = None,
+) -> Path:
+    if isinstance(source, Session):
+        report_config = config_or_out if isinstance(config_or_out, ReportConfig) else ReportConfig()
+        if out is None:
+            raise TypeError("build_report(session, config, out_pdf) requires an output path")
+        return build_report_from_session(source, out, report_config)
+
+    out_path = config_or_out
+    report_config = out if isinstance(out, ReportConfig) else ReportConfig()
+    if out_path is None or isinstance(out_path, ReportConfig):
+        raise TypeError("build_report(case_dir, out_pdf, config) requires an output path")
+    session = load_case(source, report_config)
+    return build_report_from_session(session, out_path, report_config)
 
 
 def build_report_from_session(
@@ -96,9 +112,10 @@ def build_report_from_session(
     out_path = Path(out).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with PdfPages(out_path) as pdf:
-        summary_fig = _case_summary_figure(session, analyses, plotted_bands, report_config)
-        pdf.savefig(summary_fig)
-        plt.close(summary_fig)
+        if report_config.render.include_cover_page:
+            summary_fig = _case_summary_figure(session, analyses, plotted_bands, report_config)
+            pdf.savefig(summary_fig)
+            plt.close(summary_fig)
         for key, grouped_analyses in _group_analyses_for_render(analyses, report_config):
             if report_config.render.group_by != "trajectory":
                 group_fig = _group_cover_figure(key, grouped_analyses, report_config)
@@ -108,14 +125,18 @@ def build_report_from_session(
                 page1, page2, page3, table_pages = _trajectory_figures(
                     analysis, plotted_bands, report_config
                 )
-                pdf.savefig(page1)
-                pdf.savefig(page2)
+                if page1 is not None:
+                    pdf.savefig(page1)
+                if page2 is not None:
+                    pdf.savefig(page2)
                 if page3 is not None:
                     pdf.savefig(page3)
                 for table_page in table_pages:
                     pdf.savefig(table_page)
-                plt.close(page1)
-                plt.close(page2)
+                if page1 is not None:
+                    plt.close(page1)
+                if page2 is not None:
+                    plt.close(page2)
                 if page3 is not None:
                     plt.close(page3)
                 for table_page in table_pages:
@@ -153,131 +174,190 @@ def _trajectory_figures(
     analysis: TrajectoryAnalysis,
     plotted_bands: list[str],
     config: ReportConfig,
-) -> tuple[plt.Figure, plt.Figure, plt.Figure | None, list[plt.Figure]]:
+) -> tuple[plt.Figure | None, plt.Figure | None, plt.Figure | None, list[plt.Figure]]:
     primary_band = config.bands.default_primary
-    fig1 = plt.figure(figsize=(11, 8.5), dpi=config.render.dpi, constrained_layout=True)
-    outer = fig1.add_gridspec(1, 2, width_ratios=[1.0, 1.2])
-    ax_raster = fig1.add_subplot(outer[0, 0])
-    right = outer[0, 1].subgridspec(2, 1, height_ratios=[1.6, 1.0])
-    ax_heatmap = fig1.add_subplot(right[0, 0])
-    ax_band = fig1.add_subplot(right[1, 0])
-    fig1.suptitle(_trajectory_title(analysis, plotted_bands, config))
+    depths = [item.depth_mm for item in analysis.depth_items]
 
-    plot_spike_raster(
-        ax_raster,
-        [item.depth_mm for item in analysis.depth_items],
-        [item.raster_times_s for item in analysis.depth_items],
-        config,
-    )
-    if analysis.freq_hz.size and analysis.psd_db_by_depth.size:
-        plot_lfp_heatmap(
-            ax_heatmap,
-            [item.depth_mm for item in analysis.depth_items],
-            analysis.freq_hz,
-            analysis.psd_db_by_depth,
-            band_limits(primary_band, config),
-            primary_band,
-            config,
+    page1: plt.Figure | None = None
+    include_raster = config.render.include_spike_raster_panel
+    include_heatmap = config.render.include_lfp_heatmap_panel
+    include_bandpower = config.render.include_bandpower_panel
+    right_sections = [
+        name
+        for name, enabled in (
+            ("heatmap", include_heatmap),
+            ("band", include_bandpower),
         )
-    else:
-        add_placeholder(ax_heatmap, "LFP Depth x Frequency", "No LFP PSD available", config)
-    plot_bandpower_profile(
-        ax_band,
-        [item.depth_mm for item in analysis.depth_items],
-        analysis.band_profiles_db.get(primary_band, []),
-        primary_band,
-        band_limits(primary_band, config),
-        config,
-    )
+        if enabled
+    ]
+    if include_raster or right_sections:
+        page1 = plt.figure(figsize=(11, 8.5), dpi=config.render.dpi, constrained_layout=True)
+        page1.suptitle(_trajectory_title(analysis, plotted_bands, config))
+        if include_raster and right_sections:
+            outer = page1.add_gridspec(1, 2, width_ratios=[1.0, 1.2])
+            ax_raster = page1.add_subplot(outer[0, 0])
+            right = outer[0, 1].subgridspec(
+                len(right_sections),
+                1,
+                height_ratios=[1.6 if section == "heatmap" else 1.0 for section in right_sections],
+            )
+            right_axes = [page1.add_subplot(right[idx, 0]) for idx in range(len(right_sections))]
+        elif include_raster:
+            ax_raster = page1.add_subplot(111)
+            right_axes = []
+        else:
+            ax_raster = None
+            grid = page1.add_gridspec(len(right_sections), 1)
+            right_axes = [page1.add_subplot(grid[idx, 0]) for idx in range(len(right_sections))]
 
-    dense_table = len(analysis.depth_items) > MAX_ROWS_ON_PLOT_PAGE
-    fig2 = plt.figure(figsize=(11, 8.5), dpi=config.render.dpi)
-    if dense_table:
-        grid = fig2.add_gridspec(2, 2, height_ratios=[1.0, 1.0])
-    else:
-        grid = fig2.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 1.3])
-    ax_fr_scatter = fig2.add_subplot(grid[0, 0])
-    ax_fr_hist = fig2.add_subplot(grid[0, 1])
-    ax_amp_scatter = fig2.add_subplot(grid[1, 0])
-    ax_amp_hist = fig2.add_subplot(grid[1, 1])
-    ax_table = fig2.add_subplot(grid[2, :]) if not dense_table else None
-    fig2.suptitle(_trajectory_title(analysis, plotted_bands, config))
-    plot_unit_metric_scatter(
-        ax_fr_scatter,
-        analysis.unit_summaries,
-        "firing_rate_hz",
-        "Firing Rate vs Depth",
-        "Firing Rate (Hz)",
-        "#2b9348",
-        config,
+        if ax_raster is not None:
+            plot_spike_raster(
+                ax_raster,
+                depths,
+                [item.raster_times_s for item in analysis.depth_items],
+                config,
+            )
+        for section, ax in zip(right_sections, right_axes, strict=False):
+            if section == "heatmap":
+                if analysis.freq_hz.size and analysis.psd_db_by_depth.size:
+                    plot_lfp_heatmap(
+                        ax,
+                        depths,
+                        analysis.freq_hz,
+                        analysis.psd_db_by_depth,
+                        band_limits(primary_band, config),
+                        primary_band,
+                        config,
+                    )
+                else:
+                    add_placeholder(ax, "LFP Depth x Frequency", "No LFP PSD available", config)
+            else:
+                plot_bandpower_profile(
+                    ax,
+                    depths,
+                    analysis.band_profiles_db.get(primary_band, []),
+                    primary_band,
+                    band_limits(primary_band, config),
+                    config,
+                )
+
+    dense_table = (
+        config.render.include_summary_table and len(analysis.depth_items) > MAX_ROWS_ON_PLOT_PAGE
     )
-    plot_unit_metric_hist2d(
-        ax_fr_hist,
-        analysis.unit_summaries,
-        "firing_rate_hz",
-        "Firing Rate 2D Histogram",
-        "Firing Rate (Hz)",
-        config,
-    )
-    plot_unit_metric_scatter(
-        ax_amp_scatter,
-        analysis.unit_summaries,
-        "median_p2p",
-        "Waveform Amplitude vs Depth",
-        f"Waveform p2p ({analysis.amplitude_units})",
-        "#9d4edd",
-        config,
-    )
-    plot_unit_metric_hist2d(
-        ax_amp_hist,
-        analysis.unit_summaries,
-        "median_p2p",
-        "Waveform Amplitude 2D Histogram",
-        f"Waveform p2p ({analysis.amplitude_units})",
-        config,
-    )
-    if ax_table is not None:
-        render_summary_table(
-            ax_table,
-            [item.summary_row for item in analysis.depth_items],
-            primary_band,
-            analysis.amplitude_units,
+    page2_sections: list[str] = []
+    if config.render.include_unit_fr_panel:
+        page2_sections.append("fr")
+    if config.render.include_unit_amplitude_panel:
+        page2_sections.append("amp")
+    if config.render.include_mua_rms_panel:
+        page2_sections.append("mua")
+    if config.render.include_summary_table and not dense_table:
+        page2_sections.append("table")
+
+    page2: plt.Figure | None = None
+    if page2_sections or dense_table or analysis.warnings:
+        page2 = plt.figure(figsize=(11, 8.5), dpi=config.render.dpi)
+        page2.suptitle(_trajectory_title(analysis, plotted_bands, config))
+        if page2_sections:
+            height_map = {"fr": 1.0, "amp": 1.0, "mua": 0.9, "table": 1.3}
+            grid = page2.add_gridspec(
+                len(page2_sections),
+                2,
+                height_ratios=[height_map[section] for section in page2_sections],
+            )
+            for row_index, section in enumerate(page2_sections):
+                if section == "fr":
+                    ax_scatter = page2.add_subplot(grid[row_index, 0])
+                    ax_hist = page2.add_subplot(grid[row_index, 1])
+                    plot_unit_metric_scatter(
+                        ax_scatter,
+                        analysis.unit_summaries,
+                        "firing_rate_hz",
+                        "Firing Rate vs Depth",
+                        "Firing Rate (Hz)",
+                        "#2b9348",
+                        config,
+                    )
+                    plot_unit_metric_hist2d(
+                        ax_hist,
+                        analysis.unit_summaries,
+                        "firing_rate_hz",
+                        "Firing Rate 2D Histogram",
+                        "Firing Rate (Hz)",
+                        config,
+                    )
+                elif section == "amp":
+                    ax_scatter = page2.add_subplot(grid[row_index, 0])
+                    ax_hist = page2.add_subplot(grid[row_index, 1])
+                    plot_unit_metric_scatter(
+                        ax_scatter,
+                        analysis.unit_summaries,
+                        "median_p2p",
+                        "Waveform Amplitude vs Depth",
+                        f"Waveform p2p ({analysis.amplitude_units})",
+                        "#9d4edd",
+                        config,
+                    )
+                    plot_unit_metric_hist2d(
+                        ax_hist,
+                        analysis.unit_summaries,
+                        "median_p2p",
+                        "Waveform Amplitude 2D Histogram",
+                        f"Waveform p2p ({analysis.amplitude_units})",
+                        config,
+                    )
+                elif section == "mua":
+                    ax_mua = page2.add_subplot(grid[row_index, :])
+                    plot_mua_rms_profile(
+                        ax_mua,
+                        depths,
+                        [item.summary_row.mer_rms for item in analysis.depth_items],
+                        [item.mua_mean for item in analysis.depth_items],
+                        config,
+                    )
+                else:
+                    ax_table = page2.add_subplot(grid[row_index, :])
+                    render_summary_table(
+                        ax_table,
+                        [item.summary_row for item in analysis.depth_items],
+                        primary_band,
+                        analysis.amplitude_units,
+                    )
+        if dense_table:
+            page2.text(
+                0.01,
+                0.06,
+                (
+                    "Per-depth summary table moved to the following page(s) "
+                    f"because this trajectory has {len(analysis.depth_items)} depths."
+                ),
+                ha="left",
+                va="bottom",
+                fontsize=8,
+            )
+        warning_text = _format_warnings(analysis)
+        page2.text(0.01, 0.02, warning_text, ha="left", va="bottom", fontsize=8)
+        page2.subplots_adjust(
+            left=0.07,
+            right=0.98,
+            top=0.92,
+            bottom=0.08,
+            hspace=0.55,
+            wspace=0.25,
         )
-    else:
-        fig2.text(
-            0.01,
-            0.06,
-            (
-                "Per-depth summary table moved to the following page(s) "
-                f"because this trajectory has {len(analysis.depth_items)} depths."
-            ),
-            ha="left",
-            va="bottom",
-            fontsize=8,
-        )
-    warning_text = _format_warnings(analysis)
-    fig2.text(0.01, 0.02, warning_text, ha="left", va="bottom", fontsize=8)
-    fig2.subplots_adjust(
-        left=0.07,
-        right=0.98,
-        top=0.92,
-        bottom=0.08,
-        hspace=0.55,
-        wspace=0.25,
-    )
 
     fig3: plt.Figure | None = None
-    if len(plotted_bands) > 1:
+    if config.render.include_bandpower_panel and len(plotted_bands) > 1:
         fig3 = plt.figure(figsize=(11, 8.5), dpi=config.render.dpi)
         fig3.suptitle(_trajectory_title(analysis, plotted_bands, config))
         plot_multiband_profiles(
             fig3,
-            [item.depth_mm for item in analysis.depth_items],
+            depths,
             {band: analysis.band_profiles_db.get(band, []) for band in plotted_bands},
             config,
         )
     table_pages = _summary_table_pages(analysis, config) if dense_table else []
-    return fig1, fig2, fig3, table_pages
+    return page1, page2, fig3, table_pages
 
 
 def _summary_table_pages(
@@ -453,12 +533,20 @@ def _analyze_segment(
 ) -> DepthAnalysis:
     depth_mm = float(segment.meta["depth_mm"])
     warnings: list[str] = []
+    mua_mean: float | None = None
 
     mer_selection = select_mer_stream(segment, config)
     mer_values = _extract_stream_values(segment, mer_selection)
     mer_units = mer_selection.units if mer_selection is not None and mer_selection.units else "a.u."
     if mer_values is None:
         warnings.append("MER stream unavailable")
+    elif mer_selection is not None:
+        try:
+            mua = compute_mua_envelope(mer_values, mer_selection.fs_hz, config.sorting.highpass_hz)
+            mua_mean_value = float(np.nanmean(mua))
+            mua_mean = mua_mean_value if np.isfinite(mua_mean_value) else None
+        except Exception as exc:
+            warnings.append(f"MUA summary failed: {exc}")
 
     lfp_selection = select_lfp_stream(segment, config)
     lfp_values = _extract_stream_values(segment, lfp_selection)
@@ -521,6 +609,7 @@ def _analyze_segment(
         lfp_psd=lfp_psd,
         warnings=warnings,
         amplitude_units=mer_units,
+        mua_mean=mua_mean,
     )
 
 
