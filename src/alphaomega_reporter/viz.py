@@ -57,6 +57,24 @@ def _depth_ticks(depths_mm: Sequence[float]) -> np.ndarray:
     return depths[idx]
 
 
+def _frequency_ticks(freq_hz: np.ndarray, count: int = 6) -> tuple[np.ndarray, list[str]]:
+    freq = np.asarray(freq_hz, dtype=np.float64)
+    if freq.size == 0:
+        return np.zeros(0, dtype=np.float64), []
+    raw = np.linspace(float(freq[0]), float(freq[-1]), max(count, 2))
+    labels = np.ceil(raw).astype(int)
+    positions: list[float] = []
+    formatted: list[str] = []
+    seen: set[int] = set()
+    for position, label in zip(raw, labels, strict=False):
+        if int(label) in seen:
+            continue
+        seen.add(int(label))
+        positions.append(float(position))
+        formatted.append(str(int(label)))
+    return np.asarray(positions, dtype=np.float64), formatted
+
+
 def plot_spike_raster(
     ax: Axes,
     depths_mm: Sequence[float],
@@ -130,7 +148,8 @@ def plot_lfp_heatmap(
     ax.set_title("LFP Depth x Frequency")
     ax.set_xlabel("Depth (mm)")
     ax.set_ylabel("Frequency (Hz)")
-    ax.set_yticks(np.linspace(float(freq_hz[0]), float(freq_hz[-1]), 6))
+    tick_positions, tick_labels = _frequency_ticks(freq_hz)
+    ax.set_yticks(tick_positions, labels=tick_labels)
     colorbar = ax.figure.colorbar(image, ax=ax, pad=0.01)
     colorbar.set_label("PSD (dB)")
     ax.text(
