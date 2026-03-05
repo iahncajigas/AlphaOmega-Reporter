@@ -34,6 +34,8 @@ def _apply_cli_overrides(
     band: str | None,
     plot_bands: list[str],
     group_by: str | None,
+    noise_notch_hz: float | None,
+    noise_notch_width_hz: float | None,
     sort_mode: str | None,
 ) -> ReportConfig:
     valid_bands = set(config.bands.definitions)
@@ -52,6 +54,14 @@ def _apply_cli_overrides(
         if group_by not in valid_group_by:
             raise ValueError("group-by must be one of trajectory|target|side")
         config.render.group_by = group_by
+    if noise_notch_hz is not None:
+        if noise_notch_hz <= 0:
+            raise ValueError("noise-notch-hz must be > 0")
+        config.lfp.noise_notch_hz = noise_notch_hz
+    if noise_notch_width_hz is not None:
+        if noise_notch_width_hz <= 0:
+            raise ValueError("noise-notch-width-hz must be > 0")
+        config.lfp.noise_notch_width_hz = noise_notch_width_hz
     if sort_mode is not None:
         if sort_mode not in valid_sort_modes:
             raise ValueError("sort-mode must be one of none|fast|spikeinterface")
@@ -69,6 +79,16 @@ def build_command(
     ),
     plot_band: list[str] = typer.Option(None, "--plot-band", help="Additional bands to visualize"),
     group_by: str = typer.Option("trajectory", help="trajectory, target, or side"),
+    noise_notch_hz: float | None = typer.Option(
+        None,
+        "--noise-notch-hz",
+        help="Optional LFP notch center frequency in Hz, for example 60",
+    ),
+    noise_notch_width_hz: float | None = typer.Option(
+        None,
+        "--noise-notch-width-hz",
+        help="Optional full notch width in Hz around the notch center",
+    ),
     sort_mode: str = typer.Option("fast", help="none, fast, or spikeinterface"),
     config_path: Path | None = typer.Option(
         None, "--config", exists=True, file_okay=True, dir_okay=False
@@ -83,6 +103,8 @@ def build_command(
             band=band,
             plot_bands=plot_band or [],
             group_by=group_by,
+            noise_notch_hz=noise_notch_hz,
+            noise_notch_width_hz=noise_notch_width_hz,
             sort_mode=sort_mode,
         )
         build_report(case_dir, out, config)

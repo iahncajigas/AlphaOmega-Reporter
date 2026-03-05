@@ -45,3 +45,6 @@ lfp:
   fmax_hz: 100.0
   welch_nperseg: 512
   welch_noverlap: 256
+  # Optional line-noise suppression before PSD estimation.
+  noise_notch_hz: null
+  noise_notch_width_hz: 2.0

@@ -12,6 +12,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from .config import ReportConfig
 from .features import (
     PSDResult,
+    apply_notch_filter,
     band_limits,
     compute_bandpower_db,
     compute_mer_rms,
@@ -337,6 +338,14 @@ def _case_summary_figure(
         f"Primary band: {config.bands.default_primary}",
         f"Plotted bands: {', '.join(plotted_bands)}",
         f"Sort mode: {config.sorting.mode}",
+        (
+            "LFP notch: off"
+            if config.lfp.noise_notch_hz is None
+            else (
+                f"LFP notch: {config.lfp.noise_notch_hz:.1f} Hz "
+                f"width {config.lfp.noise_notch_width_hz:.1f} Hz"
+            )
+        ),
         f"XML sidecar: {case_meta.get('xml_path') or 'not found'}",
         f"Case target: {case_meta.get('target_case_default') or 'unresolved'}",
     ]
@@ -460,6 +469,12 @@ def _analyze_segment(
     band_powers_db: dict[str, float] = {}
     if lfp_values is not None and lfp_selection is not None:
         try:
+            lfp_values = apply_notch_filter(
+                lfp_values,
+                lfp_selection.fs_hz,
+                config.lfp.noise_notch_hz,
+                config.lfp.noise_notch_width_hz,
+            )
             lfp_psd = compute_welch_psd(
                 lfp_values,
                 lfp_selection.fs_hz,

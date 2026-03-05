@@ -21,6 +21,16 @@ ao-report build \
   --sort-mode fast
 ```
 
+## Apply a 60 Hz notch to the LFP spectrum
+
+```bash
+ao-report build \
+  --case-dir /path/to/case_directory \
+  --out report_notched.pdf \
+  --noise-notch-hz 60 \
+  --noise-notch-width-hz 4
+```
+
 ## Group by target and skip local spike sorting
 
 ```bash

@@ -49,6 +49,38 @@ def test_cli_accepts_gamma_band_and_plot_bands(tmp_path, monkeypatch) -> None:
     assert captured["plot_bands"] == ["alpha"]
 
 
+def test_cli_accepts_lfp_notch_options(tmp_path, monkeypatch) -> None:
+    case_dir = write_stub_case_dir(tmp_path / "case")
+    captured = {}
+
+    def fake_build_report(case_dir_arg, out_arg, config):
+        captured["notch_hz"] = config.lfp.noise_notch_hz
+        captured["notch_width_hz"] = config.lfp.noise_notch_width_hz
+        Path(out_arg).write_text("stub", encoding="utf-8")
+        return Path(out_arg)
+
+    monkeypatch.setattr("alphaomega_reporter.cli.build_report", fake_build_report)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "build",
+            "--case-dir",
+            str(case_dir),
+            "--out",
+            str(tmp_path / "report.pdf"),
+            "--noise-notch-hz",
+            "60",
+            "--noise-notch-width-hz",
+            "4",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["notch_hz"] == 60.0
+    assert captured["notch_width_hz"] == 4.0
+
+
 def test_cli_rejects_unknown_band(tmp_path) -> None:
     case_dir = write_stub_case_dir(tmp_path / "case")
     runner = CliRunner()

@@ -109,6 +109,16 @@ class LfpConfig(BaseModel):
     fmax_hz: float = 100.0
     welch_nperseg: int = 512
     welch_noverlap: int = 256
+    noise_notch_hz: float | None = None
+    noise_notch_width_hz: float = 2.0
+
+    @model_validator(mode="after")
+    def _validate_notch(self) -> LfpConfig:
+        if self.noise_notch_hz is not None and self.noise_notch_hz <= 0:
+            raise ValueError("noise_notch_hz must be > 0 when set")
+        if self.noise_notch_width_hz <= 0:
+            raise ValueError("noise_notch_width_hz must be > 0")
+        return self
 
 
 class SortingConfig(BaseModel):

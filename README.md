@@ -62,6 +62,16 @@ ao-report build \
   --sort-mode fast
 ```
 
+Apply a configurable 60 Hz notch before the LFP PSD:
+
+```bash
+ao-report build \
+  --case-dir /path/to/case_directory \
+  --out report_notched.pdf \
+  --noise-notch-hz 60 \
+  --noise-notch-width-hz 4
+```
+
 Export a reporter-owned AO-H5-compatible file:
 
 ```bash
@@ -100,6 +110,12 @@ Page 1:
 - Spike raster vs depth
 - LFP depth x frequency heatmap using Welch PSD, plotted as `10*log10(PSD)`
 - Primary-band power vs depth
+
+Optional LFP noise suppression:
+
+- Use `--noise-notch-hz` to set the notch center, for example `60`
+- Use `--noise-notch-width-hz` to set the full width of the suppressed frequency range in Hz
+- The notch is applied before PSD estimation so the heatmap, bandpower plots, and summary table stay aligned
 
 Page 2:
 

@@ -4,6 +4,7 @@ import numpy as np
 
 from alphaomega_reporter.config import ReportConfig
 from alphaomega_reporter.features import (
+    apply_notch_filter,
     band_limits,
     clamp_nperseg,
     compute_bandpower_db,
@@ -74,3 +75,34 @@ def test_short_trace_helpers_handle_real_validation_edge_cases() -> None:
     assert clamp_nperseg(short.size, 512) == 90
     filtered = highpass_filter(short, fs_hz=24000.0, cutoff_hz=300.0)
     assert filtered.shape == short.shape
+
+
+def test_notch_filter_suppresses_60_hz_noise_without_removing_beta_peak() -> None:
+    fs_hz = 1000.0
+    times = np.arange(int(4 * fs_hz), dtype=np.float64) / fs_hz
+    values = np.sin(2.0 * np.pi * 20.0 * times) + 1.5 * np.sin(2.0 * np.pi * 60.0 * times)
+    unfiltered = compute_welch_psd(
+        values,
+        fs_hz,
+        fmin_hz=0.0,
+        fmax_hz=100.0,
+        nperseg=512,
+        noverlap=256,
+    )
+    filtered_values = apply_notch_filter(values, fs_hz=fs_hz, center_hz=60.0, width_hz=4.0)
+    filtered = compute_welch_psd(
+        filtered_values,
+        fs_hz,
+        fmin_hz=0.0,
+        fmax_hz=100.0,
+        nperseg=512,
+        noverlap=256,
+    )
+
+    band_60_before = compute_bandpower_db(unfiltered.freq_hz, unfiltered.psd, 58.0, 62.0)
+    band_60_after = compute_bandpower_db(filtered.freq_hz, filtered.psd, 58.0, 62.0)
+    beta_before = compute_bandpower_db(unfiltered.freq_hz, unfiltered.psd, 13.0, 30.0)
+    beta_after = compute_bandpower_db(filtered.freq_hz, filtered.psd, 13.0, 30.0)
+
+    assert band_60_after < band_60_before
+    assert abs(beta_after - beta_before) < 1.0

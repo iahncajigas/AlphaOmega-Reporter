@@ -152,6 +152,28 @@ def compute_mer_rms(values: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(data))))
 
 
+def apply_notch_filter(
+    values: np.ndarray,
+    fs_hz: float,
+    center_hz: float | None,
+    width_hz: float,
+) -> np.ndarray:
+    data = _as_1d(values)
+    if center_hz is None:
+        return data.astype(np.float64, copy=True)
+    if center_hz <= 0 or width_hz <= 0:
+        return data.astype(np.float64, copy=True)
+    nyquist = float(fs_hz) / 2.0
+    if center_hz >= nyquist:
+        return data.astype(np.float64, copy=True)
+    q_factor = max(float(center_hz) / float(width_hz), np.finfo(float).eps)
+    b, a = signal.iirnotch(float(center_hz), q_factor, fs=float(fs_hz))
+    padlen = 3 * (max(len(a), len(b)) - 1)
+    if data.size <= padlen:
+        return data.astype(np.float64, copy=True)
+    return signal.filtfilt(b, a, data).astype(np.float64, copy=False)
+
+
 def highpass_filter(values: np.ndarray, fs_hz: float, cutoff_hz: float) -> np.ndarray:
     data = _as_1d(values)
     if cutoff_hz <= 0 or fs_hz <= cutoff_hz * 2:
