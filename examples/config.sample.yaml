@@ -37,6 +37,7 @@ render:
 
 sorting:
   mode: fast
+  # Default kept on tridesclous2 because it validated successfully on a real case slice.
   spikeinterface_sorter: tridesclous2
 
 lfp:

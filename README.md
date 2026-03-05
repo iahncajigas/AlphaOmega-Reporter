@@ -150,7 +150,9 @@ The primary summary band defaults to `beta`. Additional bands can be rendered wi
 - Optional extra
 - Creates a single-channel recording extractor
 - Applies basic preprocessing
-- Falls back to `fast` when the requested sorter path is unavailable
+- Default sorter is `tridesclous2`
+- Falls back to `fast` when the requested sorter path is unavailable or fails
+- A clean environment may also need `numba` and `psutil` for the internal sorter path
 
 ## QC metrics
 
@@ -184,6 +186,12 @@ Run the checks locally:
 ruff format .
 ruff check .
 pytest -q
+```
+
+Optional SpikeInterface success-path validation:
+
+```bash
+AO_REPORTER_RUN_SPIKEINTERFACE=1 pytest -q -k spikeinterface_success
 ```
 
 ## Release checklist

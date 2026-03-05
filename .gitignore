@@ -1,6 +1,7 @@
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.DS_Store
 *.pyc
 *.pyo
 .ipynb_checkpoints/
@@ -11,4 +12,3 @@ src/*.egg-info/
 *.pdf
 tmp/
 output/
-
