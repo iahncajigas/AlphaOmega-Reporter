@@ -9,6 +9,7 @@ It is designed for case-directory input, native `.map/.lsm` support, XML target 
 - Native case-directory loading for AlphaOmega MAP workflows
 - XML target inference from root sidecars such as `PhysicianDescription=BL STN`
 - PDF reports with `matplotlib` and `PdfPages`
+- Cross-platform desktop GUI built with `PySide6`
 - Supported bands: `delta`, `theta`, `alpha`, `beta`, `highbeta`, `gamma`
 - Default primary band: `beta`
 - Optional spike sorting with:
@@ -37,6 +38,8 @@ Optional extras:
 ```bash
 python -m pip install -e '.[spikeinterface]'
 python -m pip install -e '.[mpx]'
+python -m pip install -e '.[gui-performance]'
+python -m pip install -e '.[packaging]'
 ```
 
 ## Quickstart
@@ -78,6 +81,12 @@ Export a reporter-owned AO-H5-compatible file:
 ao-report export-h5 \
   --case-dir /path/to/case_directory \
   --out session.h5
+```
+
+Launch the desktop GUI from source:
+
+```bash
+ao-reporter-gui
 ```
 
 ## Input model
@@ -132,6 +141,41 @@ Optional Page 3:
 
 Missing LFP or spike data render as placeholders and do not stop PDF generation.
 
+## Desktop GUI
+
+Run from source:
+
+```bash
+ao-reporter-gui
+```
+
+The GUI provides:
+
+- Case-directory loading with the same loader stack as the CLI
+- Left-side trajectory and depth selection with editable depth values
+- MER preview controls for highpass, lowpass, notch, filter order, and spike detection
+- LFP controls for band presets, custom bands, Welch or multitaper PSD, notch filtering, and frequency range
+- A report-builder tab with per-panel inclusion checkboxes, output selection, config save/load, and PDF generation
+
+Case loading workflow:
+
+1. Click `Open Case...`
+2. Choose a case directory
+3. Select a trajectory in the left sidebar
+4. Select one or more depths to drive the raster and LFP heatmap
+
+Filter and band controls:
+
+- MER previews use SciPy digital filters and update asynchronously
+- LFP bandpower can use `delta`, `theta`, `alpha`, `beta`, `highbeta`, `gamma`, or a custom band
+- Notch controls can be disabled or set to `50 Hz`, `60 Hz`, or a custom center frequency
+
+Report selection:
+
+- Use the `Report Builder` tab to include or exclude the cover page, raster, heatmap, bandpower, unit plots, summary table, and optional MUA/RMS profile
+- `Save Config` and `Load Config` work with YAML or JSON GUI configs
+- The GUI uses the same underlying report generator as the CLI
+
 ## Frequency bands
 
 Built-in bands:
@@ -180,13 +224,36 @@ The primary summary band defaults to `beta`. Additional bands can be rendered wi
 
 ```python
 from alphaomega_reporter import ReportConfig, build_report, export_h5, load_case
-from alphaomega_reporter.report import build_report_from_session
 from alphaomega_reporter.synthetic import make_synthetic_session
 
 config = ReportConfig()
 session = make_synthetic_session()
-build_report_from_session(session, "synthetic_report.pdf", config)
+build_report(session, config, "synthetic_report.pdf")
 ```
+
+## Packaging
+
+PyInstaller builds must be run on the target OS:
+
+- macOS builds must be created on macOS
+- Windows builds must be created on Windows
+
+Build commands:
+
+```bash
+./scripts/build_macos.sh
+```
+
+```powershell
+pwsh -File .\scripts\build_windows.ps1
+```
+
+Artifacts:
+
+- macOS: `dist/AlphaOmegaReporter.app` and `dist/AlphaOmegaReporter-macos.zip`
+- Windows: `dist/AlphaOmegaReporter/` and `dist/AlphaOmegaReporter-windows.zip`
+
+The PyInstaller spec is in [`packaging/alphaomega_reporter_gui.spec`](/Users/iahncajigas/Library/CloudStorage/Dropbox/Research/Matlab/AlphaOmega%20Matlab%20Loader/packaging/alphaomega_reporter_gui.spec).
 
 ## Examples
 
