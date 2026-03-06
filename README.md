@@ -36,10 +36,11 @@ python -m pip install -e '.[dev]'
 Optional extras:
 
 ```bash
+python -m pip install -e '.[gui]'
 python -m pip install -e '.[spikeinterface]'
 python -m pip install -e '.[mpx]'
 python -m pip install -e '.[gui-performance]'
-python -m pip install -e '.[packaging]'
+python -m pip install -e '.[build]'
 ```
 
 ## Quickstart
@@ -87,6 +88,12 @@ Launch the desktop GUI from source:
 
 ```bash
 ao-reporter-gui
+```
+
+If `ao-reporter-gui` reports that `PySide6` is missing, install the GUI extra first:
+
+```bash
+python -m pip install -e '.[gui]'
 ```
 
 ## Input model
@@ -146,6 +153,7 @@ Missing LFP or spike data render as placeholders and do not stop PDF generation.
 Run from source:
 
 ```bash
+python -m pip install -e '.[gui]'
 ao-reporter-gui
 ```
 
@@ -238,6 +246,12 @@ PyInstaller builds must be run on the target OS:
 - macOS builds must be created on macOS
 - Windows builds must be created on Windows
 
+Recommended build environment:
+
+```bash
+python -m pip install -e '.[gui,build]'
+```
+
 Build commands:
 
 ```bash
@@ -248,12 +262,59 @@ Build commands:
 pwsh -File .\scripts\build_windows.ps1
 ```
 
+The Windows script creates a fresh virtual environment by default, installs only `.[gui]` plus `pyinstaller`, checks for conflicting Qt bindings, removes them from the build venv if necessary, and then runs PyInstaller.
+
+Packaged desktop builds intentionally omit the optional `pyqtgraph` dependency so the bundle stays deterministic and uses the built-in Matplotlib heatmap path by default.
+
 Artifacts:
 
 - macOS: `dist/AlphaOmegaReporter.app` and `dist/AlphaOmegaReporter-macos.zip`
 - Windows: `dist/AlphaOmegaReporter/` and `dist/AlphaOmegaReporter-windows.zip`
 
 The PyInstaller spec is in [`packaging/alphaomega_reporter_gui.spec`](/Users/iahncajigas/Library/CloudStorage/Dropbox/Research/Matlab/AlphaOmega%20Matlab%20Loader/packaging/alphaomega_reporter_gui.spec).
+
+## Windows Build
+
+Prerequisites:
+
+- Python 3.10 to 3.12 installed and on `PATH`
+- PowerShell 7 or Windows PowerShell
+- A working C/C++ runtime on the target machine; if the packaged app fails to start on a clean host, install the Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
+
+Build from a repository checkout:
+
+```powershell
+pwsh -File .\scripts\build_windows.ps1
+```
+
+Default behavior:
+
+1. Creates a clean `.venv-build-windows`
+2. Installs `alphaomega-reporter` with `.[gui]`
+3. Installs `pyinstaller`
+4. Verifies `PySide6` imports and checks for `PyQt5`, `PyQt6`, and `PySide2`
+5. Removes conflicting Qt bindings from the build venv if they are present
+6. Builds `dist/AlphaOmegaReporter\`
+7. Runs a best-effort offscreen smoke launch
+8. Writes `dist/AlphaOmegaReporter-windows.zip`
+
+If you intentionally want to use an existing interpreter, pass `-UseSystemPython`, but that mode is less deterministic and will stop if conflicting Qt bindings are installed.
+
+Typical build time on a clean machine is under 10 minutes.
+
+## Troubleshooting
+
+Multiple Qt bindings error:
+
+- PyInstaller can fail when `PySide6`, `PyQt5`, `PyQt6`, or `PySide2` are installed together
+- The spec excludes non-PySide6 bindings, and the Windows build script removes conflicting bindings from its clean venv before packaging
+- If you use `-UseSystemPython`, remove `PyQt5`, `PyQt6`, and `PySide2` manually or switch back to the default clean-venv flow
+
+Qt platform plugin error:
+
+- Rebuild from a clean environment instead of reusing a long-lived dev interpreter
+- Upgrade `pyinstaller` and its bundled hooks
+- Confirm the build was produced from [`packaging/alphaomega_reporter_gui.spec`](/Users/iahncajigas/Library/CloudStorage/Dropbox/Research/Matlab/AlphaOmega%20Matlab%20Loader/packaging/alphaomega_reporter_gui.spec), which bundles the PySide6 plugins explicitly through PyInstaller's Qt hooks
 
 ## Examples
 
