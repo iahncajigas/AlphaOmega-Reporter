@@ -1,0 +1,50 @@
+targets:
+  bindings:
+    - side: L
+      trajectory: 1
+      target: STN
+    - side: R
+      trajectory: 1
+      target: STN
+
+bands:
+  default_primary: beta
+  definitions:
+    delta:
+      low_hz: 1.0
+      high_hz: 4.0
+    theta:
+      low_hz: 4.0
+      high_hz: 8.0
+    alpha:
+      low_hz: 8.0
+      high_hz: 13.0
+    beta:
+      low_hz: 13.0
+      high_hz: 30.0
+    highbeta:
+      low_hz: 20.0
+      high_hz: 30.0
+    gamma:
+      low_hz: 30.0
+      high_hz: 100.0
+
+render:
+  group_by: trajectory
+  plot_bands:
+    - alpha
+    - gamma
+
+sorting:
+  mode: fast
+  # Default kept on tridesclous2 because it validated successfully on a real case slice.
+  spikeinterface_sorter: tridesclous2
+
+lfp:
+  fmin_hz: 0.0
+  fmax_hz: 100.0
+  welch_nperseg: 512
+  welch_noverlap: 256
+  # Optional line-noise suppression before PSD estimation.
+  noise_notch_hz: null
+  noise_notch_width_hz: 2.0
