@@ -5,7 +5,10 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-project_root = Path.cwd()
+project_root = Path.cwd().resolve()
+if not (project_root / "pyproject.toml").exists():
+    raise SystemExit("Run PyInstaller from the repository root so Path.cwd() resolves cleanly.")
+
 src_root = project_root / "src"
 
 datas = collect_data_files("alphaomega_reporter")
@@ -31,9 +34,21 @@ a = Analysis(
         "PyQt5",
         "PyQt6",
         "PySide2",
+        "qtpy",
+        "PyQt5.sip",
+        "PyQt6.sip",
+        "pyqtgraph",
+        "pyqtgraph.examples",
         "IPython",
         "ipykernel",
+        "ipywidgets",
+        "jupyter",
+        "jupyter_client",
+        "jupyter_core",
         "pytest",
+        "nbclient",
+        "nbconvert",
+        "nbformat",
         "notebook",
         "jupyterlab",
         "panel",
