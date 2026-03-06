@@ -31,10 +31,16 @@ class WorkerSignals(QtCore.QObject):
 class Worker(QtCore.QRunnable):
     def __init__(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
         super().__init__()
+        self.setAutoDelete(False)
         self.fn = fn
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+
+    def dispose(self) -> None:
+        self.fn = None
+        self.args = ()
+        self.kwargs = {}
 
     @QtCore.Slot()
     def run(self) -> None:
@@ -63,6 +69,17 @@ class GuiController(QtCore.QObject):
         super().__init__(parent)
         self.thread_pool = QtCore.QThreadPool.globalInstance()
         self.cache = ProcessingCache()
+        self._active_workers: dict[int, Worker] = {}
+
+    @QtCore.Slot()
+    def _worker_finished(self) -> None:
+        sender = self.sender()
+        if not isinstance(sender, WorkerSignals):
+            return
+        worker = self._active_workers.pop(id(sender), None)
+        if worker is not None:
+            worker.dispose()
+        sender.deleteLater()
 
     def _submit(
         self,
@@ -74,15 +91,30 @@ class GuiController(QtCore.QObject):
         **kwargs: Any,
     ) -> None:
         worker = Worker(fn, *args, **kwargs)
-        worker.signals.progress.connect(self.log_message.emit)
+        worker.signals.setParent(self)
+        self._active_workers[id(worker.signals)] = worker
+        worker.signals.finished.connect(
+            self._worker_finished,
+            QtCore.Qt.ConnectionType.QueuedConnection,
+        )
+        worker.signals.progress.connect(
+            self.log_message.emit,
+            QtCore.Qt.ConnectionType.QueuedConnection,
+        )
         if on_result is not None:
-            worker.signals.result.connect(on_result)
+            worker.signals.result.connect(on_result, QtCore.Qt.ConnectionType.QueuedConnection)
         if on_error is not None:
-            worker.signals.error.connect(on_error)
+            worker.signals.error.connect(on_error, QtCore.Qt.ConnectionType.QueuedConnection)
         else:
-            worker.signals.error.connect(self.log_message.emit)
+            worker.signals.error.connect(
+                self.log_message.emit,
+                QtCore.Qt.ConnectionType.QueuedConnection,
+            )
         if on_finished is not None:
-            worker.signals.finished.connect(on_finished)
+            worker.signals.finished.connect(
+                on_finished,
+                QtCore.Qt.ConnectionType.QueuedConnection,
+            )
         self.thread_pool.start(worker)
 
     def clear_cache(self) -> None:
