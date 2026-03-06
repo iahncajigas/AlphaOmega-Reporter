@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -38,11 +39,15 @@ class Worker(QtCore.QRunnable):
     @QtCore.Slot()
     def run(self) -> None:
         try:
-            result = self.fn(
-                *self.args,
-                progress_callback=self.signals.progress.emit,
-                **self.kwargs,
+            call_kwargs = dict(self.kwargs)
+            signature = inspect.signature(self.fn)
+            accepts_var_kwargs = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in signature.parameters.values()
             )
+            if "progress_callback" in signature.parameters or accepts_var_kwargs:
+                call_kwargs["progress_callback"] = self.signals.progress.emit
+            result = self.fn(*self.args, **call_kwargs)
         except Exception:
             self.signals.error.emit(traceback.format_exc())
         else:
