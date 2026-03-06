@@ -79,7 +79,9 @@ class GuiController(QtCore.QObject):
         worker = self._active_workers.pop(id(sender), None)
         if worker is not None:
             worker.dispose()
-        sender.deleteLater()
+        # Do not post a deferred delete for these transient Python-owned signal
+        # objects. In bundled macOS builds, `deleteLater()` here can leave Qt
+        # dispatching a queued event to an invalid Shiboken wrapper.
 
     def _submit(
         self,
@@ -91,7 +93,6 @@ class GuiController(QtCore.QObject):
         **kwargs: Any,
     ) -> None:
         worker = Worker(fn, *args, **kwargs)
-        worker.signals.setParent(self)
         self._active_workers[id(worker.signals)] = worker
         worker.signals.finished.connect(
             self._worker_finished,
